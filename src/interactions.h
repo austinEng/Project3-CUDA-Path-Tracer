@@ -41,6 +41,36 @@ glm::vec3 calculateRandomDirectionInHemisphere(
         + sin(around) * over * perpendicularDirection2;
 }
 
+namespace bxdf {
+  namespace lambert {
+    __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return 1 / 3.14159265;
+    }
+    __host__ __device__ float evaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return pdf(in, normal, out);
+    }
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng) {
+      out = calculateRandomDirectionInHemisphere(normal, rng);
+      pdf = bxdf::lambert::pdf(in, normal, out);
+      return evaluateScatteredEnergy(in, normal, out);
+    }
+  }
+
+  namespace specular {
+    __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return 1 / 3.14159265;
+    }
+    __host__ __device__ float evaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return pdf(in, normal, out);
+    }
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng) {
+      out = calculateRandomDirectionInHemisphere(normal, rng);
+      pdf = bxdf::lambert::pdf(in, normal, out);
+      return evaluateScatteredEnergy(in, normal, out);
+    }
+  }
+}
+
 /**
  * Scatter a ray with some probabilities according to the material properties.
  * For example, a diffuse surface scatters in a cosine-weighted hemisphere.
@@ -76,4 +106,25 @@ void scatterRay(
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
+  glm::vec3 out;
+  float pdf;
+  glm::vec3 col;
+ 
+  /*thrust::uniform_real_distribution<float> u01(0, 1);
+  if (m.hasReflective) {
+    float refFac = u01(rng);
+    if (refFac < m.hasReflective) {
+      col = m.color * bxdf::specular::sampleAndEvaluateScatteredEnergy(pathSegment.ray.direction, normal, out, pdf, rng);
+      pathSegment.ray.direction = out;
+      pathSegment.ray.origin = intersect + out * 0.0001f;
+      pathSegment.color *= col;
+      return;
+    }
+  }*/
+
+  const glm::vec3& in = pathSegment.ray.direction;
+  col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng);
+  pathSegment.ray.direction = out;
+  pathSegment.ray.origin = intersect + out * 0.0001f;
+  pathSegment.color *= glm::abs(glm::dot(in, normal)) * col / pdf;
 }
