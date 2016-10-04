@@ -41,6 +41,38 @@ glm::vec3 calculateRandomDirectionInHemisphere(
         + sin(around) * over * perpendicularDirection2;
 }
 
+__host__ __device__
+glm::vec3 calculateRandomDirectionInSteradian(glm::vec3 normal, thrust::default_random_engine &rng, int idx, int N) {
+  int idx2 = idx / N;
+  idx = idx % N;
+  thrust::uniform_real_distribution<float> u1(idx, idx + 1);
+  thrust::uniform_real_distribution<float> u2(idx2, idx2 + 1);
+  float up = sqrt(u1(rng) / (float)N); // cos(theta)
+  float over = sqrt(1 - up * up); // sin(theta)
+  float around = u2(rng) / (float)N * TWO_PI;
+
+  glm::vec3 directionNotNormal;
+  if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(1, 0, 0);
+  }
+  else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(0, 1, 0);
+  }
+  else {
+    directionNotNormal = glm::vec3(0, 0, 1);
+  }
+
+  // Use not-normal direction to generate two perpendicular directions
+  glm::vec3 perpendicularDirection1 =
+    glm::normalize(glm::cross(normal, directionNotNormal));
+  glm::vec3 perpendicularDirection2 =
+    glm::normalize(glm::cross(normal, perpendicularDirection1));
+
+  return up * normal
+    + cos(around) * over * perpendicularDirection1
+    + sin(around) * over * perpendicularDirection2;
+}
+
 namespace bxdf {
   namespace lambert {
     __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
@@ -49,8 +81,13 @@ namespace bxdf {
     __host__ __device__ float evaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
       return pdf(in, normal, out);
     }
-    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng) {
-      out = calculateRandomDirectionInHemisphere(normal, rng);
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
+      if (depth == 0) {
+        out = calculateRandomDirectionInSteradian(normal, rng, iter % (16 * 16), 16);
+      }
+      else {
+        out = calculateRandomDirectionInHemisphere(normal, rng);
+      }
       pdf = bxdf::lambert::pdf(in, normal, out);
       return evaluateScatteredEnergy(in, normal, out);
     }
@@ -63,7 +100,7 @@ namespace bxdf {
     __host__ __device__ float evaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
       return pdf(in, normal, out);
     }
-    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng) {
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
       out = calculateRandomDirectionInHemisphere(normal, rng);
       pdf = bxdf::lambert::pdf(in, normal, out);
       return evaluateScatteredEnergy(in, normal, out);
@@ -102,28 +139,30 @@ void scatterRay(
         glm::vec3 intersect,
         glm::vec3 normal,
         const Material &m,
-        thrust::default_random_engine &rng) {
+        thrust::default_random_engine &rng, 
+        int depth, int iter) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
   glm::vec3 out;
   float pdf;
   glm::vec3 col;
- 
-  /*thrust::uniform_real_distribution<float> u01(0, 1);
-  if (m.hasReflective) {
-    float refFac = u01(rng);
-    if (refFac < m.hasReflective) {
-      col = m.color * bxdf::specular::sampleAndEvaluateScatteredEnergy(pathSegment.ray.direction, normal, out, pdf, rng);
-      pathSegment.ray.direction = out;
-      pathSegment.ray.origin = intersect + out * 0.0001f;
-      pathSegment.color *= col;
-      return;
-    }
-  }*/
-
   const glm::vec3& in = pathSegment.ray.direction;
-  col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng);
+ 
+  thrust::uniform_real_distribution<float> u01(0, 1);
+  if (m.hasReflective) {
+    if (u01(rng) < 0.5f) {
+      col = m.specular.color * bxdf::specular::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng, depth, iter);
+      col *= m.hasReflective;
+    }
+    else {
+      col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng, depth, iter);
+      col *= (1-m.hasReflective);
+    }
+  } else {
+    col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng, depth, iter);
+  }
+
   pathSegment.ray.direction = out;
   pathSegment.ray.origin = intersect + out * 0.0001f;
   pathSegment.color *= glm::abs(glm::dot(in, normal)) * col / pdf;

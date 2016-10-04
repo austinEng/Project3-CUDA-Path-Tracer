@@ -229,6 +229,7 @@ __global__ void shadeMaterial(
   , ShadeableIntersection * shadeableIntersections
   , PathSegment * pathSegments
   , Material * materials
+  , int depth
   )
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -259,7 +260,7 @@ __global__ void shadeMaterial(
         // pathSegments[idx].color *= (materialColor * lightTerm) * 0.3f + ((1.0f - intersection.t * 0.02f) * materialColor) * 0.7f;
         // pathSegments[idx].color *= u01(rng); // apply some noise because why not
         glm::vec3 intersect = pathSegments[idx].ray.origin + pathSegments[idx].ray.direction * intersection.t;
-        scatterRay(pathSegments[idx], intersect, intersection.surfaceNormal, material, rng);
+        scatterRay(pathSegments[idx], intersect, intersection.surfaceNormal, material, rng, depth, iter);
         pathSegments[idx].remainingBounces--;
       }
       // If there was no intersection, color the ray black.
@@ -369,11 +370,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		  , hst_scene->geoms.size()
 		  , dev_intersections
 		  );
-	  checkCUDAError("trace one bounce");
-	  cudaDeviceSynchronize();
-	  depth++;
-
-
+	  
 	  // TODO:
 	  // --- Shading Stage ---
 	  // Shade path segments based on intersections and generate new rays by
@@ -388,7 +385,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
       num_paths,
       dev_intersections,
       dev_paths,
-      dev_materials
+      dev_materials,
+      depth
     );
 
     // TODO: should be based off stream compaction results.
@@ -397,7 +395,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     if (num_paths == 0) {
       iterationComplete = true;
       num_paths = std::distance(dev_paths, dev_path_end);
+      depth = 0;
     } 
+
+    checkCUDAError("trace one bounce");
+    cudaDeviceSynchronize();
+    depth++;
 	}
 
   // Assemble this iteration and apply it to the image
