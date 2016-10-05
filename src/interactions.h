@@ -213,13 +213,59 @@ void scatterRay(
   glm::vec3 col;
   const glm::vec3& in = pathSegment.ray.direction;
  
-  thrust::uniform_real_distribution<float> u01(0, 1);
-  if (m.hasReflective) {
+  /*if (m.hasReflective) {
     col = bxdf::mirror::sampleAndEvaluateScatteredEnergy(m, in, normal, out, pdf, rng, depth, iter);
   } else if (m.hasRefractive) {
     col = bxdf::glass::sampleAndEvaluateScatteredEnergy(m, in, normal, out, pdf, rng, depth, iter);
   } else {
     col = bxdf::lambert::sampleAndEvaluateScatteredEnergy(m, in, normal, out, pdf, rng, depth, iter);
+  }*/
+
+
+  glm::vec3 norm = normal;
+  float ior = m.indexOfRefraction;
+  if (glm::dot(in, norm) > 0) {
+    norm = -norm;
+    ior = 1.f / ior;
+  }
+
+  glm::vec3 refl = glm::reflect(in, norm);
+  glm::vec3 refr = glm::refract(in, norm, 1.f / ior);
+
+  float fr = 0.5f * (glm::pow((ior * glm::abs(glm::dot(in, norm)) - glm::abs(glm::dot(refr, norm))) /
+    (ior * glm::abs(glm::dot(in, norm)) + glm::abs(glm::dot(refr, norm))), 2) +
+    glm::pow((glm::abs(glm::dot(in, norm)) - ior * glm::abs(glm::dot(refr, norm))) /
+    (glm::abs(glm::dot(in, norm)) + ior * glm::abs(glm::dot(refr, norm))), 2));
+
+  float refl_fac = m.hasReflective;
+  float refr_fac = (1.f - refl_fac) * m.hasRefractive;
+  float diff_fac = (1.f - refl_fac) * (1.f - m.hasRefractive);
+
+  thrust::uniform_real_distribution<float> u;
+  float fac = u(rng);
+  if (fac < refl_fac) {
+    out = refl;
+    pdf = 1.f;
+    col = m.specular.color;
+  } else if (fac < refl_fac + refr_fac) {
+    out = refr;
+    pdf = 1.f;
+    col = m.color;
+  } else {
+    if (depth == 0) {
+      out = calculateRandomDirectionInSteradian(normal, rng, iter % (16 * 16), 16);
+    }
+    else {
+      out = calculateRandomDirectionInHemisphere(normal, rng);
+    }
+    col = m.color / 3.14159265f;
+    pdf = 1.f / 3.14159265f;
+  }
+
+  if (u(rng) < fr) {
+    out = refl;
+    col = m.specular.color;
+    pdf = 1;
   }
 
   pathSegment.ray.direction = out;
