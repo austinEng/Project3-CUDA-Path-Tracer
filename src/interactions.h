@@ -89,7 +89,7 @@ namespace bxdf {
         out = calculateRandomDirectionInHemisphere(normal, rng);
       }
       pdf = bxdf::lambert::pdf(in, normal, out);
-      return evaluateScatteredEnergy(in, normal, out);
+      return evaluateScatteredEnergy(m, in, normal, out);
     }
   }
 
@@ -115,14 +115,38 @@ namespace bxdf {
       return 1;
     }
     __host__ __device__ float sampleAndEvaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
-      if (glm::acos(glm::dot(in, -normal)) >= glm::asin(1.f / m.indexOfRefraction)) {
-        out = glm::reflect(in, normal); 
-      }
-      else {
-        out = glm::refract(in, normal, 1.f / m.indexOfRefraction);
-      }
       pdf = 1;
-      return 1;
+      glm::vec3 norm = normal;
+      float ior = m.indexOfRefraction;
+      if (glm::dot(in, norm) > 0) {
+        norm = -norm;
+        ior = 1.f / ior;
+      }
+
+      glm::vec3 refl = glm::reflect(in, norm);
+      glm::vec3 refr = glm::refract(in, norm, 1.f / ior);
+
+      if (ior < 1 && glm::dot(in, -norm) < glm::cos(glm::asin(ior))) {
+        out = refl;
+      } else {
+        float fr = 0.5f * (glm::pow((ior * glm::abs(glm::dot(in, norm)) - glm::abs(glm::dot(refr, norm))) /
+          (ior * glm::abs(glm::dot(in, norm)) + glm::abs(glm::dot(refr, norm))), 2) +
+          glm::pow((glm::abs(glm::dot(in, norm)) - ior * glm::abs(glm::dot(refr, norm))) /
+          (glm::abs(glm::dot(in, norm)) + ior * glm::abs(glm::dot(refr, norm))), 2));
+
+        thrust::uniform_real_distribution<float> u;
+        float fac = u(rng);
+
+        if (fac < fr) {
+          out = refl;
+        }
+        else {
+          out = refr;
+        }
+      }
+
+      
+      return 1.f;
     }
   }
 }
@@ -179,6 +203,6 @@ void scatterRay(
   }
 
   pathSegment.ray.direction = out;
-  pathSegment.ray.origin = intersect + out * 0.0001f;
+  pathSegment.ray.origin = intersect + out * 0.01f;
   pathSegment.color *= col / pdf;
 }
