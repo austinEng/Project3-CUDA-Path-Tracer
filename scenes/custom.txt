@@ -55,7 +55,17 @@ SPECEX      0
 SPECRGB     .98 .98 .98
 REFL        0
 REFR        1
-REFRIOR     1.45
+REFRIOR     1.52
+EMITTANCE   0
+
+// Plastic yellow
+MATERIAL 6
+RGB         .98 .98 .3
+SPECEX      0
+SPECRGB     .98 .98 .98
+REFL        0
+REFR        0
+REFRIOR     1.46
 EMITTANCE   0
 
 // Camera
@@ -134,10 +144,10 @@ TRANS       2 1.5 2
 ROTAT       0 0 0
 SCALE       3 3 3
 
-// Diffuse Sphere
+// Plastic Sphere
 OBJECT 8
 sphere
-material 1
-TRANS       -3 1.5 3
+material 6
+TRANS       -3 1.5 1
 ROTAT       0 0 0
 SCALE       3 3 3
