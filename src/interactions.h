@@ -78,10 +78,10 @@ namespace bxdf {
     __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
       return 1 / 3.14159265;
     }
-    __host__ __device__ float evaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
-      return pdf(in, normal, out);
+    __host__ __device__ float evaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return 1 / 3.14159265;
     }
-    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
       if (depth == 0) {
         out = calculateRandomDirectionInSteradian(normal, rng, iter % (16 * 16), 16);
       }
@@ -93,17 +93,36 @@ namespace bxdf {
     }
   }
 
-  namespace specular {
+  namespace mirror {
     __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
-      return 1 / 3.14159265;
+      return 0;
     }
-    __host__ __device__ float evaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
-      return pdf(in, normal, out);
+    __host__ __device__ float evaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return 1;
     }
-    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
-      out = calculateRandomDirectionInHemisphere(normal, rng);
-      pdf = bxdf::lambert::pdf(in, normal, out);
-      return evaluateScatteredEnergy(in, normal, out);
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
+      out = glm::reflect(in, normal);
+      pdf = 1;
+      return 1;
+    }
+  }
+
+  namespace glass {
+    __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return 0;
+    }
+    __host__ __device__ float evaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
+      return 1;
+    }
+    __host__ __device__ float sampleAndEvaluateScatteredEnergy(const Material &m, const glm::vec3 &in, const glm::vec3 &normal, glm::vec3 &out, float &pdf, thrust::default_random_engine &rng, int depth, int iter) {
+      if (glm::acos(glm::dot(in, -normal)) >= glm::asin(1.f / m.indexOfRefraction)) {
+        out = glm::reflect(in, normal); 
+      }
+      else {
+        out = glm::refract(in, normal, 1.f / m.indexOfRefraction);
+      }
+      pdf = 1;
+      return 1;
     }
   }
 }
@@ -151,19 +170,15 @@ void scatterRay(
  
   thrust::uniform_real_distribution<float> u01(0, 1);
   if (m.hasReflective) {
-    if (u01(rng) < 0.5f) {
-      col = m.specular.color * bxdf::specular::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng, depth, iter);
-      col *= m.hasReflective;
-    }
-    else {
-      col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng, depth, iter);
-      col *= (1-m.hasReflective);
-    }
-  } else {
-    col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(in, normal, out, pdf, rng, depth, iter);
+    col = m.specular.color * bxdf::mirror::sampleAndEvaluateScatteredEnergy(m, in, normal, out, pdf, rng, depth, iter);
+  } else if (m.hasRefractive) {
+    col = m.specular.color * bxdf::glass::sampleAndEvaluateScatteredEnergy(m, in, normal, out, pdf, rng, depth, iter);
+  }
+  else {
+    col = m.color * bxdf::lambert::sampleAndEvaluateScatteredEnergy(m, in, normal, out, pdf, rng, depth, iter);
   }
 
   pathSegment.ray.direction = out;
   pathSegment.ray.origin = intersect + out * 0.0001f;
-  pathSegment.color *= glm::abs(glm::dot(in, normal)) * col / pdf;
+  pathSegment.color *= col / pdf;
 }

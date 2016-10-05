@@ -259,9 +259,14 @@ __global__ void shadeMaterial(
         // float lightTerm = glm::dot(intersection.surfaceNormal, glm::vec3(0.0f, 1.0f, 0.0f));
         // pathSegments[idx].color *= (materialColor * lightTerm) * 0.3f + ((1.0f - intersection.t * 0.02f) * materialColor) * 0.7f;
         // pathSegments[idx].color *= u01(rng); // apply some noise because why not
+        pathSegments[idx].remainingBounces--;
+        if (pathSegments[idx].remainingBounces == 0) {
+          pathSegments[idx].color = glm::vec3(0.0f);
+          return;
+        }
         glm::vec3 intersect = pathSegments[idx].ray.origin + pathSegments[idx].ray.direction * intersection.t;
         scatterRay(pathSegments[idx], intersect, intersection.surfaceNormal, material, rng, depth, iter);
-        pathSegments[idx].remainingBounces--;
+        
       }
       // If there was no intersection, color the ray black.
       // Lots of renderers use 4 channel color, RGBA, where A = alpha, often
