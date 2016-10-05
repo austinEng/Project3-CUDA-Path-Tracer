@@ -42,6 +42,81 @@ glm::vec3 calculateRandomDirectionInHemisphere(
 }
 
 __host__ __device__
+glm::vec3 calculateRandomDirectionInLobe(
+glm::vec3 normal, float exponent, thrust::default_random_engine &rng) {
+  thrust::uniform_real_distribution<float> u01(0, 1);
+
+  float up = pow(sqrt(u01(rng)), 1.f / (exponent + 1)); // cos(theta)
+  float over = sqrt(1 - up * up); // sin(theta)
+  float around = u01(rng) * TWO_PI;
+
+  // Find a direction that is not the normal based off of whether or not the
+  // normal's components are all equal to sqrt(1/3) or whether or not at
+  // least one component is less than sqrt(1/3). Learned this trick from
+  // Peter Kutz.
+
+  glm::vec3 directionNotNormal;
+  if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(1, 0, 0);
+  }
+  else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(0, 1, 0);
+  }
+  else {
+    directionNotNormal = glm::vec3(0, 0, 1);
+  }
+
+  // Use not-normal direction to generate two perpendicular directions
+  glm::vec3 perpendicularDirection1 =
+    glm::normalize(glm::cross(normal, directionNotNormal));
+  glm::vec3 perpendicularDirection2 =
+    glm::normalize(glm::cross(normal, perpendicularDirection1));
+
+  return up * normal
+    + cos(around) * over * perpendicularDirection1
+    + sin(around) * over * perpendicularDirection2;
+}
+
+__host__ __device__
+glm::vec3 calculateRandomDirectionInSteradianLobe(
+glm::vec3 normal, float exponent, thrust::default_random_engine &rng, int idx, int N) {
+  int idx2 = idx / N;
+  idx = idx % N;
+  thrust::uniform_real_distribution<float> u1(idx, idx + 1);
+  thrust::uniform_real_distribution<float> u2(idx2, idx2 + 1);
+
+  float up = pow(sqrt(u1(rng)), 1.f/(exponent + 1)); // cos(theta)
+  float over = sqrt(1 - up * up); // sin(theta)
+  float around = u2(rng) * TWO_PI;
+
+  // Find a direction that is not the normal based off of whether or not the
+  // normal's components are all equal to sqrt(1/3) or whether or not at
+  // least one component is less than sqrt(1/3). Learned this trick from
+  // Peter Kutz.
+
+  glm::vec3 directionNotNormal;
+  if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(1, 0, 0);
+  }
+  else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(0, 1, 0);
+  }
+  else {
+    directionNotNormal = glm::vec3(0, 0, 1);
+  }
+
+  // Use not-normal direction to generate two perpendicular directions
+  glm::vec3 perpendicularDirection1 =
+    glm::normalize(glm::cross(normal, directionNotNormal));
+  glm::vec3 perpendicularDirection2 =
+    glm::normalize(glm::cross(normal, perpendicularDirection1));
+
+  return up * normal
+    + cos(around) * over * perpendicularDirection1
+    + sin(around) * over * perpendicularDirection2;
+}
+
+__host__ __device__
 glm::vec3 calculateRandomDirectionInSteradian(glm::vec3 normal, thrust::default_random_engine &rng, int idx, int N) {
   int idx2 = idx / N;
   idx = idx % N;
@@ -223,6 +298,13 @@ void scatterRay(
 
 
   glm::vec3 norm = normal;
+  if (depth == 0) {
+    norm = calculateRandomDirectionInSteradianLobe(normal, m.specular.exponent, rng, iter % (16 * 16), 16);
+  }
+  else {
+    norm = calculateRandomDirectionInLobe(normal, m.specular.exponent, rng);
+  }
+
   float ior = m.indexOfRefraction;
   if (glm::dot(in, norm) > 0) {
     norm = -norm;
@@ -237,7 +319,7 @@ void scatterRay(
     glm::pow((glm::abs(glm::dot(in, norm)) - ior * glm::abs(glm::dot(refr, norm))) /
     (glm::abs(glm::dot(in, norm)) + ior * glm::abs(glm::dot(refr, norm))), 2));
 
-  float refl_fac = m.hasReflective;
+  float refl_fac = glm::min(1.f, fr + m.hasReflective);
   float refr_fac = (1.f - refl_fac) * m.hasRefractive;
   float diff_fac = (1.f - refl_fac) * (1.f - m.hasRefractive);
 
@@ -245,8 +327,15 @@ void scatterRay(
   float fac = u(rng);
   if (fac < refl_fac) {
     out = refl;
-    pdf = 1.f;
-    col = m.specular.color;
+    glm::vec3 h = glm::normalize(out + -in);
+
+    float G = min(1.f, min(
+      2.f*glm::abs(glm::dot(normal, h))*glm::abs(glm::dot(normal, in)) / glm::abs(glm::dot(in, h)),
+      2.f*glm::abs(glm::dot(normal, h))*glm::abs(glm::dot(normal, out)) / glm::abs(glm::dot(in, h))
+      ));
+    pdf = (m.specular.exponent + 1) * glm::pow(glm::abs(glm::dot(h, normal)), m.specular.exponent) / TWO_PI;
+    
+    col = m.specular.color * pdf * G;
   } else if (fac < refl_fac + refr_fac) {
     out = refr;
     pdf = 1.f;
@@ -260,12 +349,6 @@ void scatterRay(
     }
     col = m.color / 3.14159265f;
     pdf = 1.f / 3.14159265f;
-  }
-
-  if (u(rng) < fr) {
-    out = refl;
-    col = m.specular.color;
-    pdf = 1;
   }
 
   pathSegment.ray.direction = out;
