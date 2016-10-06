@@ -1,0 +1,185 @@
+MATERIAL 0
+RGB         1 1 1
+SPECEX      0
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     1.0
+EMITTANCE   16
+
+MATERIAL 1
+RGB         1 1 1
+SPECEX      0
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     1.0
+EMITTANCE   8
+
+MATERIAL 2
+RGB         1 1 1
+SPECEX      0
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     1.0
+EMITTANCE   4
+
+MATERIAL 3
+RGB         1 1 1
+SPECEX      0
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     1.0
+EMITTANCE   2
+
+MATERIAL 4
+RGB         1 1 1
+SPECEX      0
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     1.0
+EMITTANCE   1
+
+MATERIAL 5
+RGB         .98 .98 .98
+SPECEX      0
+SPECRGB     0 0 0
+REFL        0
+REFR        0
+REFRIOR     1.0
+EMITTANCE   0
+
+MATERIAL 6
+RGB         1 1 1
+SPECEX      40
+SPECRGB     .98 .98 .98
+REFL        1
+REFR        0
+REFRIOR     1.0
+EMITTANCE   0
+
+MATERIAL 7
+RGB         1 1 1
+SPECEX      156
+SPECRGB     .98 .98 .98
+REFL        1
+REFR        0
+REFRIOR     1.0
+EMITTANCE   0
+
+MATERIAL 8
+RGB         1 1 1
+SPECEX      625
+SPECRGB     .98 .98 .98
+REFL        1
+REFR        0
+REFRIOR     1.0
+EMITTANCE   0
+
+MATERIAL 9
+RGB         1 1 1
+SPECEX      2500
+SPECRGB     .98 .98 .98
+REFL        1
+REFR        0
+REFRIOR     1.0
+EMITTANCE   0
+
+MATERIAL 10
+RGB         1 1 1
+SPECEX      10000
+SPECRGB     .98 .98 .98
+REFL        1
+REFR        0
+REFRIOR     1.0
+EMITTANCE   0
+
+CAMERA
+RES         800 600
+FOVY        20
+ITERATIONS  5000
+DEPTH       8
+FILE        veach
+EYE         0.0 5 15
+LOOKAT      0 5 0
+UP          0 1 0
+
+OBJECT 0
+sphere
+material 0
+TRANS       -5 8 0
+ROTAT       0 0 0
+SCALE       .1 .1 .1
+
+OBJECT 1
+sphere
+material 0
+TRANS       -2.5 8 0
+ROTAT       0 0 0
+SCALE       .45 .45 .45
+
+OBJECT 2
+sphere
+material 0
+TRANS       0 8 0
+ROTAT       0 0 0
+SCALE       .8 .8 .8
+
+OBJECT 3
+sphere
+material 0
+TRANS       2.5 8 0
+ROTAT       0 0 0
+SCALE       1.15 1.15 1.15
+
+OBJECT 4
+sphere
+material 0
+TRANS       5 8 0
+ROTAT       0 0 0
+SCALE       1.5 1.5 1.5
+
+OBJECT 5
+cube
+material 5
+TRANS       0 0 0
+ROTAT       20 0 0
+SCALE       100 .01 100
+
+OBJECT 6
+cube
+material 6
+TRANS       0 2 4.6
+ROTAT       18 0 0
+SCALE       10 .1 1
+
+OBJECT 7
+cube
+material 7
+TRANS       0 2.5 3.4
+ROTAT       23 0 0
+SCALE       10 .1 1
+
+OBJECT 8
+cube
+material 8
+TRANS       0 3.2 2.3
+ROTAT       28 0 0
+SCALE       10 .1 1
+
+OBJECT 9
+cube
+material 9
+TRANS       0 4 1
+ROTAT       36 0 0
+SCALE       10 .1 1
+
+OBJECT 10
+cube
+material 10
+TRANS       0 5 0
+ROTAT       45 0 0
+SCALE       10 .1 1
