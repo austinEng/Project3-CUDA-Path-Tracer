@@ -61,9 +61,9 @@ EMITTANCE   0
 // Plastic yellow
 MATERIAL 6
 RGB         .98 .98 .3
-SPECEX      100
+SPECEX      10
 SPECRGB     .98 .98 .98
-REFL        0.5
+REFL        0.2
 REFR        0
 REFRIOR     1.46
 EMITTANCE   0

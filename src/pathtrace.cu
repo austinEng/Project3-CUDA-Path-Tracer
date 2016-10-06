@@ -5,6 +5,8 @@
 #include <thrust/random.h>
 #include <thrust/remove.h>
 #include <thrust/partition.h>
+#include <curand.h>
+#include <thrust/device_vector.h>
 
 #include "sceneStructs.h"
 #include "scene.h"
@@ -70,10 +72,12 @@ __global__ void sendImageToPBO(uchar4* pbo, glm::ivec2 resolution,
 
 static Scene * hst_scene = NULL;
 static glm::vec3 * dev_image = NULL;
+static Uniform * dev_uniforms = NULL;
 static Geom * dev_geoms = NULL;
 static Material * dev_materials = NULL;
 static PathSegment * dev_paths = NULL;
 static ShadeableIntersection * dev_intersections = NULL;
+static curandGenerator_t qrng;
 // TODO: static variables for device memory, any extra info you need, etc
 // ...
 
@@ -84,6 +88,8 @@ void pathtraceInit(Scene *scene) {
 
     cudaMalloc(&dev_image, pixelcount * sizeof(glm::vec3));
     cudaMemset(dev_image, 0, pixelcount * sizeof(glm::vec3));
+
+    cudaMalloc(&dev_uniforms, pixelcount * sizeof(Uniform));
 
   	cudaMalloc(&dev_paths, pixelcount * sizeof(PathSegment));
 
@@ -97,17 +103,24 @@ void pathtraceInit(Scene *scene) {
   	cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
 
     // TODO: initialize any extra device memeory you need
+      
+    curandCreateGenerator(&qrng, CURAND_RNG_QUASI_SOBOL32);
+    curandSetQuasiRandomGeneratorDimensions(qrng, sizeof(Uniform) / sizeof(float));
+    curandSetGeneratorOrdering(qrng, CURAND_ORDERING_QUASI_DEFAULT);
 
     checkCUDAError("pathtraceInit");
 }
 
 void pathtraceFree() {
     cudaFree(dev_image);  // no-op if dev_image is null
+    cudaFree(dev_uniforms);
   	cudaFree(dev_paths);
   	cudaFree(dev_geoms);
   	cudaFree(dev_materials);
   	cudaFree(dev_intersections);
     // TODO: clean up any extra device memory you created
+
+    curandDestroyGenerator(qrng);
 
     checkCUDAError("pathtraceFree");
 }
@@ -120,7 +133,7 @@ void pathtraceFree() {
 * motion blur - jitter rays "in time"
 * lens effect - jitter ray origin positions based on a lens
 */
-__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments)
+__global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, PathSegment* pathSegments, float* uX, float* uY)
 {
 	int x = (blockIdx.x * blockDim.x) + threadIdx.x;
 	int y = (blockIdx.y * blockDim.y) + threadIdx.y;
@@ -130,6 +143,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		PathSegment & segment = pathSegments[index];
 
 		segment.ray.origin = cam.position;
+    segment.ray.origin += uX[index] * cam.pixelLength.x * cam.right;
+    segment.ray.origin += uY[index] * cam.pixelLength.y * cam.up;
     segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
 
 		// TODO: implement antialiasing by jittering the ray
@@ -230,6 +245,9 @@ __global__ void shadeMaterial(
   , PathSegment * pathSegments
   , Material * materials
   , int depth
+  , float * u_hemi1
+  , float * u_hemi2
+  , float * u_mat
   )
 {
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
@@ -241,8 +259,8 @@ __global__ void shadeMaterial(
       // Set up the RNG
       // LOOK: this is how you use thrust's RNG! Please look at
       // makeSeededRandomEngine as well.
-      thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
-      thrust::uniform_real_distribution<float> u01(0, 1);
+      //thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
+      //thrust::uniform_real_distribution<float> u01(0, 1);
 
       Material material = materials[intersection.materialId];
       glm::vec3 materialColor = material.color;
@@ -265,7 +283,7 @@ __global__ void shadeMaterial(
           return;
         }
         glm::vec3 intersect = pathSegments[idx].ray.origin + pathSegments[idx].ray.direction * intersection.t;
-        scatterRay(pathSegments[idx], intersect, intersection.surfaceNormal, material, rng, depth, iter);
+        scatterRay(pathSegments[idx], intersect, intersection.surfaceNormal, material, u_hemi1[idx], u_hemi2[idx], u_mat[idx]);
         
       }
       // If there was no intersection, color the ray black.
@@ -318,6 +336,19 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// 1D block for path tracing
 	const int blockSize1d = 128;
 
+  float* u_pixelX;
+  float* u_pixelY;
+  float* u_hemi1;
+  float* u_hemi2;
+  float* u_mat;
+
+  curandGenerateUniform(qrng, (float*)dev_uniforms, sizeof(Uniform) / sizeof(float) * pixelcount);
+  u_pixelX = (float*)dev_uniforms + offsetof(Uniform, pixel_x) / sizeof(float) * pixelcount;
+  u_pixelY = (float*)dev_uniforms + offsetof(Uniform, pixel_y) / sizeof(float) * pixelcount;
+  u_hemi1 = (float*)dev_uniforms + offsetof(Uniform, hemi_1) / sizeof(float) * pixelcount;
+  u_hemi2 = (float*)dev_uniforms + offsetof(Uniform, hemi_2) / sizeof(float) * pixelcount;
+  u_mat = (float*)dev_uniforms + offsetof(Uniform, mat) / sizeof(float) * pixelcount;
+
     ///////////////////////////////////////////////////////////////////////////
 
     // Recap:
@@ -349,7 +380,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
     // TODO: perform one iteration of path tracing
 
-	generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths);
+	generateRayFromCamera <<<blocksPerGrid2d, blockSize2d >>>(cam, iter, traceDepth, dev_paths, u_pixelX, u_pixelY);
 	checkCUDAError("generate camera ray");
 
 	int depth = 0;
@@ -361,6 +392,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
   bool iterationComplete = false;
 	while (!iterationComplete) {
+    curandGenerateUniform(qrng, (float*)dev_uniforms, sizeof(Uniform) / sizeof(float) * pixelcount);
+    u_pixelX = (float*)dev_uniforms + offsetof(Uniform, pixel_x) / sizeof(float) * pixelcount;
+    u_pixelY = (float*)dev_uniforms + offsetof(Uniform, pixel_y) / sizeof(float) * pixelcount;
+    u_hemi1 = (float*)dev_uniforms + offsetof(Uniform, hemi_1) / sizeof(float) * pixelcount;
+    u_hemi2 = (float*)dev_uniforms + offsetof(Uniform, hemi_2) / sizeof(float) * pixelcount;
+    u_mat = (float*)dev_uniforms + offsetof(Uniform, mat) / sizeof(float) * pixelcount;
 
 	  // clean shading chunks
 	  cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
@@ -391,7 +428,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
       dev_intersections,
       dev_paths,
       dev_materials,
-      depth
+      depth,
+      u_hemi1, u_hemi2, u_mat
     );
 
     // TODO: should be based off stream compaction results.

@@ -9,12 +9,11 @@
  */
 __host__ __device__
 glm::vec3 calculateRandomDirectionInHemisphere(
-        glm::vec3 normal, thrust::default_random_engine &rng) {
-    thrust::uniform_real_distribution<float> u01(0, 1);
+        glm::vec3 normal, float u1, float u2) {
 
-    float up = sqrt(u01(rng)); // cos(theta)
+    float up = sqrt(u1); // cos(theta)
     float over = sqrt(1 - up * up); // sin(theta)
-    float around = u01(rng) * TWO_PI;
+    float around = u2 * TWO_PI;
 
     // Find a direction that is not the normal based off of whether or not the
     // normal's components are all equal to sqrt(1/3) or whether or not at
@@ -43,12 +42,11 @@ glm::vec3 calculateRandomDirectionInHemisphere(
 
 __host__ __device__
 glm::vec3 calculateRandomDirectionInLobe(
-glm::vec3 normal, float exponent, thrust::default_random_engine &rng) {
-  thrust::uniform_real_distribution<float> u01(0, 1);
+glm::vec3 normal, float exponent, float u1, float u2) {
 
-  float up = pow(sqrt(u01(rng)), 1.f / (exponent + 1)); // cos(theta)
+  float up = pow(sqrt(u1), 1.f / (exponent + 1)); // cos(theta)
   float over = sqrt(1 - up * up); // sin(theta)
-  float around = u01(rng) * TWO_PI;
+  float around = u2 * TWO_PI;
 
   // Find a direction that is not the normal based off of whether or not the
   // normal's components are all equal to sqrt(1/3) or whether or not at
@@ -77,77 +75,7 @@ glm::vec3 normal, float exponent, thrust::default_random_engine &rng) {
     + sin(around) * over * perpendicularDirection2;
 }
 
-__host__ __device__
-glm::vec3 calculateRandomDirectionInSteradianLobe(
-glm::vec3 normal, float exponent, thrust::default_random_engine &rng, int idx, int N) {
-  int idx2 = idx / N;
-  idx = idx % N;
-  thrust::uniform_real_distribution<float> u1(idx, idx + 1);
-  thrust::uniform_real_distribution<float> u2(idx2, idx2 + 1);
-
-  float up = pow(sqrt(u1(rng)), 1.f/(exponent + 1)); // cos(theta)
-  float over = sqrt(1 - up * up); // sin(theta)
-  float around = u2(rng) * TWO_PI;
-
-  // Find a direction that is not the normal based off of whether or not the
-  // normal's components are all equal to sqrt(1/3) or whether or not at
-  // least one component is less than sqrt(1/3). Learned this trick from
-  // Peter Kutz.
-
-  glm::vec3 directionNotNormal;
-  if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
-    directionNotNormal = glm::vec3(1, 0, 0);
-  }
-  else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
-    directionNotNormal = glm::vec3(0, 1, 0);
-  }
-  else {
-    directionNotNormal = glm::vec3(0, 0, 1);
-  }
-
-  // Use not-normal direction to generate two perpendicular directions
-  glm::vec3 perpendicularDirection1 =
-    glm::normalize(glm::cross(normal, directionNotNormal));
-  glm::vec3 perpendicularDirection2 =
-    glm::normalize(glm::cross(normal, perpendicularDirection1));
-
-  return up * normal
-    + cos(around) * over * perpendicularDirection1
-    + sin(around) * over * perpendicularDirection2;
-}
-
-__host__ __device__
-glm::vec3 calculateRandomDirectionInSteradian(glm::vec3 normal, thrust::default_random_engine &rng, int idx, int N) {
-  int idx2 = idx / N;
-  idx = idx % N;
-  thrust::uniform_real_distribution<float> u1(idx, idx + 1);
-  thrust::uniform_real_distribution<float> u2(idx2, idx2 + 1);
-  float up = sqrt(u1(rng) / (float)N); // cos(theta)
-  float over = sqrt(1 - up * up); // sin(theta)
-  float around = u2(rng) / (float)N * TWO_PI;
-
-  glm::vec3 directionNotNormal;
-  if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
-    directionNotNormal = glm::vec3(1, 0, 0);
-  }
-  else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
-    directionNotNormal = glm::vec3(0, 1, 0);
-  }
-  else {
-    directionNotNormal = glm::vec3(0, 0, 1);
-  }
-
-  // Use not-normal direction to generate two perpendicular directions
-  glm::vec3 perpendicularDirection1 =
-    glm::normalize(glm::cross(normal, directionNotNormal));
-  glm::vec3 perpendicularDirection2 =
-    glm::normalize(glm::cross(normal, perpendicularDirection1));
-
-  return up * normal
-    + cos(around) * over * perpendicularDirection1
-    + sin(around) * over * perpendicularDirection2;
-}
-
+/*
 namespace bxdf {
   namespace lambert {
     __host__ __device__ float pdf(const glm::vec3 &in, const glm::vec3 &normal, const glm::vec3 &out) {
@@ -246,6 +174,7 @@ namespace bxdf {
     }
   }
 }
+*/
 
 /**
  * Scatter a ray with some probabilities according to the material properties.
@@ -278,8 +207,7 @@ void scatterRay(
         glm::vec3 intersect,
         glm::vec3 normal,
         const Material &m,
-        thrust::default_random_engine &rng, 
-        int depth, int iter) {
+        float u1, float u2, float u3) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
@@ -298,12 +226,7 @@ void scatterRay(
 
 
   glm::vec3 norm = normal;
-  if (depth == 0) {
-    norm = calculateRandomDirectionInSteradianLobe(normal, m.specular.exponent, rng, iter % (16 * 16), 16);
-  }
-  else {
-    norm = calculateRandomDirectionInLobe(normal, m.specular.exponent, rng);
-  }
+  norm = calculateRandomDirectionInLobe(normal, m.specular.exponent, u1, u2);
 
   float ior = m.indexOfRefraction;
   if (glm::dot(in, norm) > 0) {
@@ -323,9 +246,7 @@ void scatterRay(
   float refr_fac = (1.f - refl_fac) * m.hasRefractive;
   float diff_fac = (1.f - refl_fac) * (1.f - m.hasRefractive);
 
-  thrust::uniform_real_distribution<float> u;
-  float fac = u(rng);
-  if (fac < refl_fac) {
+  if (u3 < refl_fac) {
     out = refl;
     glm::vec3 h = glm::normalize(out + -in);
 
@@ -336,17 +257,12 @@ void scatterRay(
     pdf = (m.specular.exponent + 1) * glm::pow(glm::abs(glm::dot(h, normal)), m.specular.exponent) / TWO_PI;
     
     col = m.specular.color * pdf * G;
-  } else if (fac < refl_fac + refr_fac) {
+  } else if (u3 < refl_fac + refr_fac) {
     out = refr;
     pdf = 1.f;
     col = m.color;
   } else {
-    if (depth == 0) {
-      out = calculateRandomDirectionInSteradian(normal, rng, iter % (16 * 16), 16);
-    }
-    else {
-      out = calculateRandomDirectionInHemisphere(normal, rng);
-    }
+    out = calculateRandomDirectionInHemisphere(normal, u1, u2);
     col = m.color / 3.14159265f;
     pdf = 1.f / 3.14159265f;
   }

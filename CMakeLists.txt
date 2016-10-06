@@ -80,6 +80,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     src
     #stream_compaction  # TODO: uncomment if using your stream compaction
     ${CORELIBS}
+	${CUDA_curand_LIBRARY}
     )
 
 add_custom_command(
