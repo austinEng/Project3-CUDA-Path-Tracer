@@ -13,4 +13,7 @@ typedef struct Uniform {
   float hemi_1;
   float hemi_2;
   float mat;
+  float light;
+  float light1;
+  float light2;
 } Uniform;

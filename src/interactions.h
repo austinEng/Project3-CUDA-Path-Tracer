@@ -207,12 +207,13 @@ void scatterRay(
         glm::vec3 intersect,
         glm::vec3 normal,
         const Material &m,
-        float u1, float u2, float u3) {
+        float u1, float u2, float u3,
+        glm::vec3 &outCol, float &outPdf) {
     // TODO: implement this.
     // A basic implementation of pure-diffuse shading will just call the
     // calculateRandomDirectionInHemisphere defined above.
   glm::vec3 out;
-  float pdf;
+  float pdf = 1;
   glm::vec3 col;
   const glm::vec3& in = pathSegment.ray.direction;
  
@@ -254,20 +255,129 @@ void scatterRay(
       2.f*glm::abs(glm::dot(normal, h))*glm::abs(glm::dot(normal, in)) / glm::abs(glm::dot(in, h)),
       2.f*glm::abs(glm::dot(normal, h))*glm::abs(glm::dot(normal, out)) / glm::abs(glm::dot(in, h))
       ));
-    pdf = (m.specular.exponent + 1) * glm::pow(glm::abs(glm::dot(h, normal)), m.specular.exponent) / TWO_PI;
+    pdf *= (m.specular.exponent + 1) * glm::pow(glm::abs(glm::dot(h, normal)), m.specular.exponent) / TWO_PI;
     
     col = m.specular.color * pdf * G;
   } else if (u3 < refl_fac + refr_fac) {
     out = refr;
-    pdf = 1.f;
+    pdf *= 1.f;
     col = m.color;
   } else {
     out = calculateRandomDirectionInHemisphere(normal, u1, u2);
     col = m.color / 3.14159265f;
-    pdf = 1.f / 3.14159265f;
+    pdf *= 1.f / 3.14159265f;
   }
 
   pathSegment.ray.direction = out;
   pathSegment.ray.origin = intersect + out * 0.01f;
-  pathSegment.color *= col / pdf;
+  //pathSegment.color *= col / pdf;
+  outCol = col / pdf;
+  outPdf = pdf;
+}
+
+__device__ void intersectPath(PathSegment &pathSegment, Geom * geoms, int geoms_size, ShadeableIntersection &intersection) {
+  float t;
+  glm::vec3 intersect_point;
+  glm::vec3 normal;
+  float t_min = FLT_MAX;
+  int hit_geom_index = -1;
+  bool outside = true;
+
+  glm::vec3 tmp_intersect;
+  glm::vec3 tmp_normal;
+
+  // naive parse through global geoms
+
+  for (int i = 0; i < geoms_size; i++)
+  {
+    Geom & geom = geoms[i];
+
+    if (geom.type == CUBE)
+    {
+      t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+    }
+    else if (geom.type == SPHERE)
+    {
+      t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+    }
+    // TODO: add more intersection tests here... triangle? metaball? CSG?
+
+    // Compute the minimum t from the intersection tests to determine what
+    // scene geometry object was hit first.
+    if (t > 0.0f && t_min > t)
+    {
+      t_min = t;
+      hit_geom_index = i;
+      intersect_point = tmp_intersect;
+      normal = tmp_normal;
+    }
+  }
+
+  if (hit_geom_index == -1)
+  {
+    intersection.t = -1.0f;
+  }
+  else
+  {
+    //The ray hits something
+    intersection.t = t_min;
+    intersection.materialId = geoms[hit_geom_index].materialid;
+    intersection.surfaceNormal = normal;
+    intersection.geomId = hit_geom_index;
+  }
+}
+
+__host__ __device__ void samplePointOnSphere(
+  const Geom &sphere, float u1, float u2, float &pdf, 
+  const glm::vec3 &from, glm::vec3 &pt)
+{
+  float up = sqrt(u1); // cos(theta)
+  float over = sqrt(1 - up * up); // sin(theta)
+  float around = u2 * TWO_PI;
+  
+  glm::vec3 normal = glm::normalize(from - sphere.translation);
+
+  glm::vec3 directionNotNormal;
+  if (abs(normal.x) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(1, 0, 0);
+  }
+  else if (abs(normal.y) < SQRT_OF_ONE_THIRD) {
+    directionNotNormal = glm::vec3(0, 1, 0);
+  }
+  else {
+    directionNotNormal = glm::vec3(0, 0, 1);
+  }
+
+  // Use not-normal direction to generate two perpendicular directions
+  glm::vec3 perpendicularDirection1 =
+    glm::normalize(glm::cross(normal, directionNotNormal));
+  glm::vec3 perpendicularDirection2 =
+    glm::normalize(glm::cross(normal, perpendicularDirection1));
+
+  pt = up * normal
+    + cos(around) * over * perpendicularDirection1
+    + sin(around) * over * perpendicularDirection2;
+ 
+  pt = 0.5f * glm::vec3(sphere.transform * glm::vec4(pt, 1));
+  float a = sphere.transform[0][0] * 0.5f;
+  float b = sphere.transform[1][1] * 0.5f;
+  float c = sphere.transform[2][2] * 0.5f;
+  float area = (float)(
+    4 * PI * glm::pow((
+      glm::pow(a * b, 1.6075) + 
+      glm::pow(a * c, 1.6075) + 
+      glm::pow(b * c, 1.6075)
+    ) / 3, 0.62208));
+  return;
+  pdf = pow(
+    glm::distance(pt, from) /
+    glm::dot(normal, glm::normalize(from - pt)) * area
+    , 2);
+}
+
+__host__ __device__ void samplePointOnCube(
+  const Geom &cube, float u1, float u2, float &pdf, 
+  const glm::vec3 &from, glm::vec3 &pt)
+{
+  // not implemented
 }
