@@ -68,3 +68,5 @@ One thing I would like to explore is computing sobol sequences on the device and
 ## Materials
 
 Multiple materials were implemented. Refraction with fresnel, reflection, partially specular surfaces. Currently these all occur in one uber shader. In the future I would like to break this into multiple shader calls.
+
+![](img/breakdown.png)
