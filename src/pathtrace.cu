@@ -166,8 +166,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		PathSegment & segment = pathSegments[index];
 
 		segment.ray.origin = cam.position;
-    //segment.ray.origin += uX[index] * cam.pixelLength.x * cam.right;
-    //segment.ray.origin += uY[index] * cam.pixelLength.y * cam.up;
+    segment.ray.origin += uX[index] * cam.pixelLength.x * cam.right;
+    segment.ray.origin += uY[index] * cam.pixelLength.y * cam.up;
     segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
     segment.pdf = 1;
 
@@ -255,6 +255,7 @@ __global__ void shadeMaterial(
       // Set up the RNG
       // LOOK: this is how you use thrust's RNG! Please look at
       // makeSeededRandomEngine as well.
+      
       //thrust::default_random_engine rng = makeSeededRandomEngine(iter, idx, 0);
       //thrust::uniform_real_distribution<float> u01(0, 1);
 
@@ -428,11 +429,11 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 	  // tracing
 	  dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
-//#ifdef PROFILING
+#ifdef PROFILING
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-//#endif
+#endif
     computeIntersections <<<numblocksPathSegmentTracing, blockSize1d>>> (
       iter
 		  , depth
@@ -443,7 +444,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		  , dev_intersections
       , dev_first_intersections
 		  );
-//#ifdef PROFILING
+#ifdef PROFILING
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
@@ -453,7 +454,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     intersectTime.close();
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
-//#endif
+#endif
 
 	  // TODO:
 	  // --- Shading Stage ---
@@ -488,7 +489,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
     ofstream shadeTime;
-    shadeTime.open("shade.txt", std::ios::app);
+    shadeTime.open("shadeThrust.txt", std::ios::app);
     shadeTime << milliseconds << "ms\n";
     shadeTime.close();
     cudaEventDestroy(start);

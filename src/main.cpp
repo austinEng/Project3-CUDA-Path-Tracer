@@ -129,7 +129,7 @@ void runCuda() {
     }
 
     ofstream pathtraceTime;
-    if (iteration < renderState->iterations && iteration < 256) {
+    if (iteration < renderState->iterations && iteration < 5001) {
         uchar4 *pbo_dptr = NULL;
         iteration++;
         cudaGLMapBufferObject((void**)&pbo_dptr, pbo);
