@@ -139,9 +139,9 @@ void runCuda() {
         auto begin = std::chrono::high_resolution_clock::now();
         pathtrace(pbo_dptr, frame, iteration);
         auto end = std::chrono::high_resolution_clock::now();
-        pathtraceTime.open("totalTime.txt", std::ios::app);
-        pathtraceTime << std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count() << "ns\n";
-        pathtraceTime.close();
+        //pathtraceTime.open("totalTime.txt", std::ios::app);
+        //pathtraceTime << std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count() << "ns\n";
+        //pathtraceTime.close();
         if (iteration % 256 == 0) {
           //saveImage();
         }

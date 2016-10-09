@@ -166,8 +166,8 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		PathSegment & segment = pathSegments[index];
 
 		segment.ray.origin = cam.position;
-    segment.ray.origin += uX[index] * cam.pixelLength.x * cam.right;
-    segment.ray.origin += uY[index] * cam.pixelLength.y * cam.up;
+    //segment.ray.origin += uX[index] * cam.pixelLength.x * cam.right;
+    //segment.ray.origin += uY[index] * cam.pixelLength.y * cam.up;
     segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
     segment.pdf = 1;
 
@@ -295,8 +295,7 @@ __global__ void shadeMaterial(
     }
     else {
       pathSegments[idx].color = glm::vec3(0.0f);
-      pathSegments[idx].remainingBounces--;
-      //pathSegments[idx].remainingBounces = 0;
+      pathSegments[idx].remainingBounces = 0;
     }
   }
 }
@@ -429,11 +428,11 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 	  // tracing
 	  dim3 numblocksPathSegmentTracing = (num_paths + blockSize1d - 1) / blockSize1d;
-#ifdef PROFILING
+//#ifdef PROFILING
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-#endif
+//#endif
     computeIntersections <<<numblocksPathSegmentTracing, blockSize1d>>> (
       iter
 		  , depth
@@ -444,7 +443,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		  , dev_intersections
       , dev_first_intersections
 		  );
-#ifdef PROFILING
+//#ifdef PROFILING
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&milliseconds, start, stop);
@@ -454,7 +453,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     intersectTime.close();
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
-#endif
+//#endif
 
 	  // TODO:
 	  // --- Shading Stage ---
