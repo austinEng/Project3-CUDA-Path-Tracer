@@ -18,7 +18,7 @@
 #include "interactions.h"
 
 #define ERRORCHECK 1
-#define PROFILING
+// #define PROFILING
 
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 #define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
@@ -295,7 +295,8 @@ __global__ void shadeMaterial(
     }
     else {
       pathSegments[idx].color = glm::vec3(0.0f);
-      pathSegments[idx].remainingBounces = 0;
+      pathSegments[idx].remainingBounces--;
+      //pathSegments[idx].remainingBounces = 0;
     }
   }
 }
@@ -494,7 +495,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 #endif
-
+    
 #ifdef PROFILING
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
