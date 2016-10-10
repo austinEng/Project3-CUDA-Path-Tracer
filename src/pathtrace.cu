@@ -295,8 +295,7 @@ __global__ void shadeMaterial(
     }
     else {
       pathSegments[idx].color = glm::vec3(0.0f);
-      pathSegments[idx].remainingBounces--;
-      //pathSegments[idx].remainingBounces = 0;
+      pathSegments[idx].remainingBounces = 0;
     }
   }
 }
@@ -318,6 +317,14 @@ struct filterPaths
     __host__ __device__
     bool operator()(const PathSegment& segment) {
       return segment.remainingBounces > 0;
+    }
+};
+
+struct compareMaterials
+{
+    __host__ __device__
+    bool operator()(const ShadeableIntersection & i1, const ShadeableIntersection & i2) {
+      return i1.materialId < i2.materialId;
     }
 };
 
@@ -464,6 +471,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     // materials you have in the scenefile.
     // TODO: compare between directly shading the path segments and shading
     // path segments that have been reshuffled to be contiguous in memory.
+
+    thrust::sort_by_key(thrust::device, dev_intersections, dev_intersections + num_paths, dev_paths, compareMaterials());
 
 #ifdef PROFILING
     cudaEventCreate(&start);
