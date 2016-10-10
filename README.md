@@ -63,10 +63,18 @@ Sobol sampling is another sampling method that can be used to avoid uneven rando
 
 Though quasirandom sampling has nice interactive benefits (every iteration is unbiased), it may not ultimately be worth it for maximum render performance. The Sobol sequence generation incurs a large overhead that makes the sobol sequence methods much slower. Stratified sampling produces results that are visually equivalent with almost no overhead from computing random numbers.
 
-One thing I would like to explore is computing sobol sequences on the device and not using cuRand or perhaps computing these random sequencse on the CPU while the GPU is doing other work. This may help to mitigate the performance benefits of using cuRand.
+One thing I would like to explore is computing sobol sequences on the device and not using cuRand or perhaps computing these random sequences on the CPU while the GPU is doing other work. This may help to mitigate the performance overhead of using cuRand.
 
 ## Materials
 
 Multiple materials were implemented. Refraction with fresnel, reflection, partially specular surfaces. Currently these all occur in one uber shader. In the future I would like to break this into multiple shader calls.
 
 ![](img/breakdown.png)
+
+## Contiguous Material shading
+
+Currently, all rays are shaded in one kernel. It may be possible to achieve performance benefits if all rays that hit the same material were contiguous in memory. They would all take the same branches in the shader, hopefully decreasing the execution time of a warp. While this is true and does work, unfortunately the overhead involved in sorting the rays and intersections is far greater than these performance gains.
+
+![](img/sortedShading.png)
+
+We can see that there was just a 0.09ms speedup in shading time at the cost of 10.95ms to sort.

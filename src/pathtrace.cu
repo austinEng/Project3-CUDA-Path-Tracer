@@ -471,8 +471,19 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
     // materials you have in the scenefile.
     // TODO: compare between directly shading the path segments and shading
     // path segments that have been reshuffled to be contiguous in memory.
-
+    /*cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
     thrust::sort_by_key(thrust::device, dev_intersections, dev_intersections + num_paths, dev_paths, compareMaterials());
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&milliseconds, start, stop);
+    ofstream sortTime;
+    sortTime.open("sort.txt", std::ios::app);
+    sortTime << milliseconds << "ms\n";
+    sortTime.close();
+    cudaEventDestroy(start);
+    cudaEventDestroy(stop);*/
 
 #ifdef PROFILING
     cudaEventCreate(&start);
